@@ -18,8 +18,17 @@ function Assert-Result($Condition, [string]$Message) { if (-not $Condition) { th
 function Run-Scanner([string[]]$CliArguments) { Invoke-Entry (Join-Path $install 'rkhunter.cmd') $CliArguments }
 
 try {
-    $result = Invoke-Entry (Join-Path $root 'installer.ps1') @('--install','--prefix',$install)
+    $userPathBefore = [Environment]::GetEnvironmentVariable('Path','User')
+    $result = Invoke-Entry (Join-Path $root 'setup.cmd') @('--prefix',$install,'--no-path')
     Assert-Result ($result.Code -eq 0 -and (Test-Path -LiteralPath (Join-Path $install 'rkhunter.cmd'))) 'installer creates a usable installation at a path containing spaces'
+    $processPathBefore = $env:Path
+    Push-Location -LiteralPath $run
+    try {
+        # Model a newly opened terminal without touching the persistent PATH.
+        $env:Path = $install + ';' + $env:Path
+        $result = Invoke-Entry 'rkhunter.cmd' @('--version')
+    } finally { $env:Path = $processPathBefore; Pop-Location }
+    Assert-Result ($result.Code -eq 0 -and $result.Output.Contains('native Windows port')) 'installed command resolves through PATH from another working directory'
 
     $tracked = Join-Path $install 'trusted fixture.bin'
     [IO.File]::WriteAllText($tracked, 'verified original fixture')
@@ -54,7 +63,7 @@ try {
     $dataPath = Join-Path $install 'data\windows-indicators.json'
     $data = [IO.File]::ReadAllText($dataPath) | ConvertFrom-Json; $data.version = 'locally-reviewed-version'
     $data | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $dataPath -Encoding UTF8
-    $result = Invoke-Entry (Join-Path $root 'installer.ps1') @('--install','--prefix',$install)
+    $result = Invoke-Entry (Join-Path $root 'setup.cmd') @('--prefix',$install,'--no-path')
     Assert-Result ($result.Code -eq 0 -and (Get-FileHash -LiteralPath $baselinePath -Algorithm SHA256).Hash -eq $baselineHash -and (Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash -eq $configHash -and ([IO.File]::ReadAllText($dataPath) | ConvertFrom-Json).version -eq 'locally-reviewed-version' -and (Test-Path -LiteralPath ($config + '.dist'))) 'installer upgrade preserves trust, configuration and local indicators'
 
     $lock = [IO.File]::Open((Join-Path $install 'state\rkhunter.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
@@ -66,6 +75,8 @@ try {
     Assert-Result ($result.Code -eq 2 -and (Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash -eq $configHash) 'output collision fails without modifying configuration'
     $result = Run-Scanner @('--definitely-invalid')
     Assert-Result ($result.Code -eq 2) 'invalid flags return a failure status through the batch launcher'
+    Assert-Result ([Environment]::GetEnvironmentVariable('Path','User') -eq $userPathBefore) '--no-path leaves the real user PATH unchanged'
+    Assert-Result ((Test-Path -LiteralPath (Join-Path $install 'rkhunter-admin.cmd')) -and (Test-Path -LiteralPath (Join-Path $install 'src\Rkhunter.Launcher.psm1'))) 'installation includes the Administrator launcher and elevation support'
     Write-Host "Integration: $script:passed passed. Artifacts: $run"
     exit 0
 } catch {

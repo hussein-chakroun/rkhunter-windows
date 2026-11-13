@@ -61,6 +61,7 @@ Usage: rkhunter {--check | --propupd [file,...] | --list [tests|rootkits|propfil
                  | --config-check | --update | --version | --help} [options]
 
   -c, --check              Perform a read-only Windows inspection
+      --admin             Request an Administrator window through Windows UAC
       --propupd [files]    Explicitly trust current files and account state
   -C, --config-check       Validate configuration, test selection and indicator data
       --list tests        List supported, adapted and unsupported checks
@@ -75,7 +76,7 @@ Usage: rkhunter {--check | --propupd [file,...] | --list [tests|rootkits|propfil
       --rwo               Display warnings/errors only (full log is still written)
       --cronjob           Check quietly; use --rwo to print warnings
       --nocolors          Plain console output
-      --sk, --skip-keypress  Accepted; Windows scans never pause
+      --sk, --skip-keypress  Do not pause the new Administrator window at exit
       --appendlog         Append instead of rotating the previous log to .old
   -q, --quiet             Suppress console results
   -V, --version           Show Windows port version
@@ -265,7 +266,10 @@ function Get-RkhFileRecord([string]$Path) {
 
 function Get-RkhPropertyFiles($Context) {
     @(@($Context.Config.FILE) + @($Context.Config.ConfigFiles) + @(
-        (Join-Path $Context.Root 'rkhunter.ps1'), (Join-Path $Context.Root 'src\Rkhunter.psm1'),
+        (Join-Path $Context.Root 'rkhunter.ps1'), (Join-Path $Context.Root 'rkhunter.cmd'),
+        (Join-Path $Context.Root 'rkhunter-admin.cmd'), (Join-Path $Context.Root 'setup.cmd'),
+        (Join-Path $Context.Root 'installer.ps1'), (Join-Path $Context.Root 'src\Rkhunter.psm1'),
+        (Join-Path $Context.Root 'src\Rkhunter.Launcher.psm1'), (Join-Path $Context.Root 'src\Rkhunter.Install.psm1'),
         (Join-Path $Context.Root 'data\windows-indicators.json'), (Join-Path $Context.Root 'data\backdoorports.dat')
     ) | Sort-Object -Unique)
 }

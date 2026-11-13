@@ -17,3 +17,6 @@ jobs:
       - name: Launcher and installer integration
         shell: powershell
         run: .\tests\integration.ps1
+      - name: PATH and elevation argument handling
+        shell: powershell
+        run: .\tests\launchers.ps1

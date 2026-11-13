@@ -41,7 +41,8 @@ Supported original options include `--enable`, `--disable`, `--configfile`,
 `--dbdir`, `--logfile`/`-l`, `--nocolors`, `--appendlog`, `--quiet`/`-q`,
 `--cronjob`, `--rwo`/`--report-warnings-only`, and
 `--sk`/`--skip-keypress`. The Windows extension `--json` writes a structured
-report and `--update-source` selects a reviewed local indicator source.
+report, `--update-source` selects a reviewed local indicator source, and
+`--admin` requests an Administrator window through Windows UAC.
 
 There is no Unix package-manager integration, Perl helper execution, upstream
 network updater, ClamAV signature execution, mail sending, or automatic task
