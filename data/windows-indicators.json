@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "version": "2026.11.13.1",
+  "description": "Local Windows indicators. Empty by default: upstream Unix signatures do not identify Windows rootkits. Add verified hashes or exact paths from your trusted threat intelligence source.",
+  "sha256": [],
+  "paths": []
+}

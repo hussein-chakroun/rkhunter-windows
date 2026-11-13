@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Preserve the supplied reference source byte-for-byte for SHA256SUMS.json.
+/upstream/** -text
+/data/backdoorports.dat -text

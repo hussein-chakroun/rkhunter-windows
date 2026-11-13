@@ -1,0 +1,19 @@
+name: Windows checks
+on: [push, pull_request]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate configuration
+        shell: powershell
+        run: .\rkhunter.ps1 --config-check
+      - name: Regression tests on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\run.ps1
+      - name: Regression tests on PowerShell 7
+        shell: pwsh
+        run: .\tests\run.ps1
+      - name: Launcher and installer integration
+        shell: powershell
+        run: .\tests\integration.ps1

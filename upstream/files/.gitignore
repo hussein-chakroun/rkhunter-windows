@@ -1,0 +1,3 @@
+# Packaging override added by the Windows port. Original upstream files remain
+# unchanged. Keep the reference development scripts despite ../.gitignore.
+!development/

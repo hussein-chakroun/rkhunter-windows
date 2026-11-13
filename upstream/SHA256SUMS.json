@@ -1,0 +1,194 @@
+﻿[
+    {
+        "path":  ".gitignore",
+        "sha256":  "1454fb3350df64fab4ced2760145a029ef40d0f747c00c4f89038c6be34c05f8"
+    },
+    {
+        "path":  "installer.sh",
+        "sha256":  "2b58162a6bd34b730c1697b3ac61d5936e1f165eb48ce384fc0074448a70c9a6"
+    },
+    {
+        "path":  "files/ACKNOWLEDGMENTS",
+        "sha256":  "c9ae491f58ebddb4c8e3e6500105fe5e0f07455fefe7f0d8bf57293b30dc9853"
+    },
+    {
+        "path":  "files/backdoorports.dat",
+        "sha256":  "5b12b8b0b3d9bae840b3ffa77d5ab6c0db90596bd2d15f3d456e875b924279f4"
+    },
+    {
+        "path":  "files/CHANGELOG",
+        "sha256":  "bf656a403e63a462e878d06db3f603548e53bb8c895b6dc9d711852ece44bcb4"
+    },
+    {
+        "path":  "files/check_modules.pl",
+        "sha256":  "f38a0f8f37aa93b608aa5b10957dce64c2136b41c9628f78ba6cc04c29c67805"
+    },
+    {
+        "path":  "files/FAQ",
+        "sha256":  "66f95c7302728ce0259a6e562e5271d41b4c5318f07339dfe007a28737404c39"
+    },
+    {
+        "path":  "files/filehashsha.pl",
+        "sha256":  "0b048410ad9de800c7718bedd636891fb73eb032f01b4231b3165476f65ceb7c"
+    },
+    {
+        "path":  "files/LICENSE",
+        "sha256":  "95c19cdb42f59f3e7be8fbb5d74b53c6721b334cac922df7205245df49aa9bef"
+    },
+    {
+        "path":  "files/mirrors.dat",
+        "sha256":  "a3e6dde866413069c3b88c26d58502df896c51edd874648d78944f8bd8462a9b"
+    },
+    {
+        "path":  "files/programs_bad.dat",
+        "sha256":  "4a6b83bd308c559f2e37758ded700a7ec11758682701c9cef71dbf65b128b1dc"
+    },
+    {
+        "path":  "files/readlink.sh",
+        "sha256":  "bab8a76103567c78d86affbe3f153a0102ea881624cf6391f6c8eb5be6027118"
+    },
+    {
+        "path":  "files/README",
+        "sha256":  "282d8c86aa2d92e6ccb255db4b4ef1473c017547e46b73d48251cbd16932207f"
+    },
+    {
+        "path":  "files/rkhunter",
+        "sha256":  "a837039f7b6c3dc62877e585604573cc56bc3f90031b0859a037bfa25b125ee4"
+    },
+    {
+        "path":  "files/rkhunter.8",
+        "sha256":  "ce71a21adcf4d9fdab0836bd440873a2de18b81f0497e41ea6a54a2b0bd216fd"
+    },
+    {
+        "path":  "files/rkhunter.conf",
+        "sha256":  "2a4a8ccc41b489ad0f0adf6bd8fa245e9d8e0dd57039d17d1ea2ac8e41c66a31"
+    },
+    {
+        "path":  "files/rkhunter.spec",
+        "sha256":  "9cf5ffda900cc828d088e216910ed5c6abf9b4dea2a640fc78ff6ef67dc4d03a"
+    },
+    {
+        "path":  "files/stat.pl",
+        "sha256":  "61ecd525680c6674f4d19c51c38afcb6c1f6367d146fb3ea72ec09b1a756b7bb"
+    },
+    {
+        "path":  "files/suspscan.dat",
+        "sha256":  "d885b0238d55990b97a8ba9a69cda4cce2c8c95d932c7aea82e85c51e3c70eb2"
+    },
+    {
+        "path":  "files/contrib/README.txt",
+        "sha256":  "65458e5ce015ff4c7e475c48cdc6d32d3dcfc36ffd2e67b977bc145371a7039e"
+    },
+    {
+        "path":  "files/contrib/rkhunter_remote_howto.txt",
+        "sha256":  "f64a87c79ba4b2e37bde0ff12acc4fbae4885e1c7a158af58d25941af7547f5f"
+    },
+    {
+        "path":  "files/contrib/run_rkhunter.sh",
+        "sha256":  "3ec1c1559d9518a74fc70d8e70baad37f72e90bf569ddc428cef1ffbaed1ae01"
+    },
+    {
+        "path":  "files/development/i18nchk",
+        "sha256":  "c3d2fa3a4d9a92870c317ed2e0d7fcdccf009d9656c92651fcf66880e35190a3"
+    },
+    {
+        "path":  "files/development/new-OS-support",
+        "sha256":  "1f4cf960b836c5fa58fe1a9648f969b26172a3383f344a497c2f1cbc07bc67ac"
+    },
+    {
+        "path":  "files/i18n/cn",
+        "sha256":  "99110e557370d55e3b309bc3b9bcbc2d091bfd11954cb80c1dd1028d9b425481"
+    },
+    {
+        "path":  "files/i18n/de",
+        "sha256":  "8d6cdd8f09c5ec23464666001e227d4db5deae2bac2710861b33ec1a38b291cf"
+    },
+    {
+        "path":  "files/i18n/en",
+        "sha256":  "7b644e464ab80c294e33fde8f02c12a4ecc4b5cb1ccefbe498ab3b5fb390777b"
+    },
+    {
+        "path":  "files/i18n/ja",
+        "sha256":  "e938d91a10c34a00c11ea88765d681fa1cd31f64558c86b11a236faa190ebdf6"
+    },
+    {
+        "path":  "files/i18n/tr",
+        "sha256":  "77dd578d23cbd929036fa17a88e6d38abfc938c8e708364157951af8aae64571"
+    },
+    {
+        "path":  "files/i18n/tr.utf8",
+        "sha256":  "6ca21487fb52070e0e2818a6802726da33464e66ef3c5610c83d2eab3e17300d"
+    },
+    {
+        "path":  "files/i18n/zh",
+        "sha256":  "00e7919229875c75db7932016611a49948a3f114be29364c50770270525fcba2"
+    },
+    {
+        "path":  "files/i18n/zh.utf8",
+        "sha256":  "f2a951d751a879d90154c30e9b01a9c12c630fc9d3b2b537a9ab372560327264"
+    },
+    {
+        "path":  "files/signatures/RKH_BillGates.ldb",
+        "sha256":  "bd04640fe23ec224ffc9b929b6d65c5c73c0af133184047d8b1429fccfe41a3d"
+    },
+    {
+        "path":  "files/signatures/RKH_dso.ldb",
+        "sha256":  "5fa76479c2da857cb79a231532b56b03f1b6a0e4090b4f0276f12f35960dec59"
+    },
+    {
+        "path":  "files/signatures/RKH_Glubteba.ldb",
+        "sha256":  "be2da970e926247972b137e4cff5cbe1c16f68ff772582cf998bd60b4838fc96"
+    },
+    {
+        "path":  "files/signatures/RKH_iptablex.ldb",
+        "sha256":  "566b88379828a39da504add2addee24a91c510d79a16b326a7fe38705d7961ac"
+    },
+    {
+        "path":  "files/signatures/RKH_jynx.ldb",
+        "sha256":  "0cc3308fe367d0d170d2a239c83fda89ae7fc2c897c9ee08964a0b45d5abee86"
+    },
+    {
+        "path":  "files/signatures/RKH_kbeast.ldb",
+        "sha256":  "03bfd41216b492ff07c4d79260b7b688d14873f091abac1c2b16872405adaf50"
+    },
+    {
+        "path":  "files/signatures/RKH_libkeyutils.ldb",
+        "sha256":  "4b2a3399eee2571182a6b33955364327d15d036100f745ecde5d072e1cdb4225"
+    },
+    {
+        "path":  "files/signatures/RKH_libkeyutils1.ldb",
+        "sha256":  "5a8d89a7e4a7a12a236d2bc997ccfc8ddf2efed08a6d11fb500d1c82abb35ba1"
+    },
+    {
+        "path":  "files/signatures/RKH_libncom.ldb",
+        "sha256":  "fec1ab9e085e51879e98eb729c76b39527fd2f25ec98efad2b39e7c1979c18a4"
+    },
+    {
+        "path":  "files/signatures/RKH_MMD-0028-2014.ldb",
+        "sha256":  "67ce0b2ad14266dbd12e2f98c349f604274d1f9e6f0a45a3a68362b3cbc3924e"
+    },
+    {
+        "path":  "files/signatures/RKH_pamunixtrojan.ldb",
+        "sha256":  "2531358e0cdf977cb3db8ddd5765abd96cae684cb062cd469bcd40016b803cc2"
+    },
+    {
+        "path":  "files/signatures/RKH_shv.ldb",
+        "sha256":  "ce62a99be46a40f184c784557714ca07d55a5176192b9da9adb9df9c67d159b9"
+    },
+    {
+        "path":  "files/signatures/RKH_sniffer.ldb",
+        "sha256":  "61a27c9ebb642fa0602b48412f260246c83b5524d1eaceb922758ed22b3a6487"
+    },
+    {
+        "path":  "files/signatures/RKH_sshd.ldb",
+        "sha256":  "7a992bf61bd0b89fcc5a8dbff759d82a55479afae75f296c4a816b36d8abdae3"
+    },
+    {
+        "path":  "files/signatures/RKH_turtle.ldb",
+        "sha256":  "eb8533d113722029a9daf07efe326e7108d11948f54b28227572690569df62fc"
+    },
+    {
+        "path":  "files/signatures/RKH_xsyslog.ldb",
+        "sha256":  "618469c3ed016a42cd1925553497d92ca59b89ad547e488e68b6bc1638c8a1e5"
+    }
+]
