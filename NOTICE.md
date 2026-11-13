@@ -1,11 +1,11 @@
 Rootkit Hunter for Windows is a modified, independently maintained adaptation,
 not an official upstream Windows release.
 
-The supplied source tree was copied from:
-`C:\Users\legion\Downloads\rkhunter-master\rkhunter-master`.
-The source files identify Rootkit Hunter 1.4.6 and include a June 2017 manual;
-the supplied archive's filesystem dates are February 2018. These are historical
-inputs, not current Windows malware intelligence.
+The reference source is the Rootkit Hunter 1.4.6 snapshot preserved in
+`upstream/`. It includes a June 2017 manual; the source archive's filesystem
+dates are February 2018. These are historical inputs, not current Windows
+malware intelligence. The original files are recorded in
+`upstream/SHA256SUMS.json`.
 
 Upstream attribution: The Rootkit Hunter project, Copyright (c) 2003-2018,
 Michael Boelen, and contributors. Additional author and copyright notices are

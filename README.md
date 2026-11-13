@@ -1,43 +1,77 @@
 # Rootkit Hunter for Windows
 
-A native Windows adaptation of the supplied Linux/Unix Rootkit Hunter project.
-It keeps the command-line scan, property baseline, configuration, warning,
-log and test-selection workflow, using PowerShell and Windows APIs.
-The original source is preserved in [`upstream/`](upstream/).
+[![Windows checks](https://github.com/hussein-chakroun/rkhunter/actions/workflows/windows.yml/badge.svg)](https://github.com/hussein-chakroun/rkhunter/actions/workflows/windows.yml)
+[![License: GPL v2 or later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
 
-**This is a Windows port, not a detection-equivalent replica.** Linux rootkit
-paths, kernel interfaces, PAM, shell commands and ELF signatures cannot be
-applied to Windows. Unsupported checks explicitly report `Skipped`.
-This is a user-mode integrity and heuristic inspection tool, not a kernel
-rootkit detector or an antivirus replacement. A compromised kernel can hide
-information from every API this tool uses.
+A PowerShell command-line tool for Windows file integrity checks, persistence
+inspection, and security configuration review. It adapts the Rootkit Hunter
+workflow to Windows APIs, with explicit baselines, configurable checks, readable
+summaries, and JSON reports.
 
-## Run
+This is an **independent Windows adaptation**, not an official upstream release.
+The original Rootkit Hunter 1.4.6 source is preserved in [`upstream/`](upstream/).
+
+> **Scope:** This tool performs user-mode integrity and heuristic checks. It
+> cannot establish that a computer is free of rootkits. Linux-only checks are
+> reported as skipped, and the Windows threat indicator database starts empty.
+> It complements other security controls and investigation methods.
+
+[Quick start](#quick-start) · [Features](#features) · [Commands and configuration](#commands-and-configuration) · [Reports and exit codes](#reports-and-exit-codes) · [Installation options](#installation-options) · [Development](#development)
+
+## Requirements
 
 Use 64-bit Windows PowerShell 5.1 (included with Windows 10/11) or PowerShell 7
 on Windows. There are no Python, WSL, Bash, Perl, Pester or third-party module
-dependencies. Windows Server can run the core checks, but desktop antivirus
+dependencies. Administrator access is recommended for the most complete
+inspection. Windows Server can run the core checks, but desktop antivirus
 registration and some optional cmdlets may be unavailable.
 
-After cloning, open a normal PowerShell terminal **inside the cloned folder**
-and install:
+## Quick start
+
+### 1. Clone and install
+
+Open a normal PowerShell terminal and run these commands in order:
 
 ```powershell
+git clone https://github.com/hussein-chakroun/rkhunter.git
+Set-Location .\rkhunter
 .\setup.cmd
 ```
 
+Git is needed only for cloning. If you download a repository ZIP instead,
+extract it and open PowerShell inside the folder containing `setup.cmd`, then
+run `.\setup.cmd`.
+
 This installs to `%LOCALAPPDATA%\Programs\rkhunter` and adds that directory to
 **your user PATH**. Installation does not need Administrator rights at this
-default location. Close and reopen your terminal application after installation
-(including Windows Terminal or VS Code, if that hosts your terminal).
+default location.
+
+### 2. Make the command available
+
+Close and reopen your terminal application after installation, including Windows
+Terminal or VS Code if it hosts the terminal.
+
+To use the newly installed command immediately in the **same PowerShell window**,
+run:
+
+```powershell
+$env:Path = "$env:LOCALAPPDATA\Programs\rkhunter;$env:Path"
+```
+
+This refreshes this terminal session only; the installer already saved
+the user PATH for future terminals. For a custom installation destination, use
+that directory instead of `%LOCALAPPDATA%\Programs\rkhunter` in the command.
+
+### 3. Run a scan
 
 You can then run these commands **from any folder**:
 
 ```powershell
 rkhunter --config-check
-rkhunter --check
 rkhunter --admin --check
 ```
+
+To inspect with your current permissions instead, run `rkhunter --check`.
 
 Use **`--admin` for the most complete scan**: it requests Windows UAC approval
 and opens an Administrator console. A normal scan works with reduced access;
@@ -52,11 +86,15 @@ stay visible. Use `--sk`, `--quiet` or `--cronjob` to disable that final pause.
 The original terminal waits and receives the scan's exit code. `--admin` is an
 interactive UAC flow, not an unattended task-elevation mechanism.
 
+### 4. Save a report
+
 To save a report at a path that works from any folder:
 
 ```powershell
 rkhunter --admin --check --json "$env:USERPROFILE\rkhunter-report.json"
 ```
+
+### 5. Create a trusted baseline
 
 A first scan reports a missing property/account baseline. **After independently
 verifying the computer**, explicitly create one, then scan again:
@@ -85,7 +123,7 @@ can run on a default Windows installation. They do not change the saved user or
 machine execution policy; organizational Group Policy can still restrict them.
 Direct `.ps1` invocation follows your terminal's execution policy.
 
-## What it inspects
+## Features
 
 | Area | Windows behavior |
 | --- | --- |
@@ -107,20 +145,32 @@ Many legitimate drivers are catalog-signed without embedded signatures;
 Port matches come from the **historical upstream Unix database**, not a current
 Windows threat feed.
 
-The bundled Windows indicator database is intentionally **empty**. There is no
-invented Windows rootkit-family coverage, active vendor signature feed, CVE
-scanner, offline image scan, hidden process/port detector, or malware removal.
-`known_rkts` reports `Skipped` until you supply verified indicators.
+The bundled Windows indicator database starts **empty**. `known_rkts` reports
+`Skipped` until you supply verified indicators. The tool has no active vendor
+signature feed, CVE scanner, offline image scan, hidden process/port detector,
+or automatic malware removal. A compromised kernel can hide information from
+the user-mode APIs used by this scanner.
 
 ## Commands and configuration
 
+After installation, these commands work from any folder:
+
+| Command | Purpose |
+| --- | --- |
+| `rkhunter --help` | Show commands and options |
+| `rkhunter --version` | Show the Windows port version |
+| `rkhunter --list tests` | List checks, groups, and unsupported checks |
+| `rkhunter --list propfiles` | List monitored files |
+| `rkhunter --config-check` | Validate configuration and indicator data |
+| `rkhunter --admin --check` | Request an elevated scan |
+| `rkhunter --check --enable properties,ports --disable attributes` | Select checks and groups |
+| `rkhunter --admin --propupd cmd.exe` | Explicitly refresh matching existing baseline file entries |
+
+For noninteractive console output, use the following with the permissions of
+the terminal or task that launches it:
+
 ```powershell
-.\rkhunter.cmd --help
-.\rkhunter.cmd --list tests
-.\rkhunter.cmd --list propfiles
-.\rkhunter.cmd --check --enable properties,ports --disable attributes
-.\rkhunter.cmd --cronjob --rwo --json .\var\scheduled-report.json
-.\rkhunter.cmd --propupd cmd.exe
+rkhunter --cronjob --rwo --json "$env:USERPROFILE\rkhunter-scheduled-report.json"
 ```
 
 Only one primary command is accepted per invocation. Scans do not pause between
@@ -129,6 +179,10 @@ window. Unsupported flags fail with an error.
 `--versioncheck` fails explicitly because no Windows release feed exists.
 The CLI and Windows reports are English; the original translations remain
 available as reference.
+
+Edit configuration inside the installation you run. For the default install,
+this is `%LOCALAPPDATA%\Programs\rkhunter`; a checkout uses its own files and
+state.
 
 Edit `rkhunter.conf`, add `rkhunter.conf.local`, or use sorted
 `rkhunter.d/*.conf` files beside it. Overrides load in that order. Values are
@@ -175,7 +229,51 @@ commands; review them before sharing.
 ## Reports and exit codes
 
 Each result has a test, subject, status, original status and explanation. JSON
-includes the selected tests, counts, timestamps, elevation status and exit code.
+includes the selected tests, counts, timestamps, elevation status and exit code,
+plus a structured `Summary` with the same interpretation shown in the console.
+
+Abbreviated example:
+
+```text
+Result: REVIEW NEEDED - warnings were reported
+Run: 38 selected checks; Administrator=True. Baseline: Missing.
+Windows threat indicators: Empty; Windows threat indicator inspection was skipped.
+
+Warnings grouped for review:
+  File/account comparisons have no usable baseline - results: 4; distinct entries: 4
+    No usable earlier state is available for comparison. ...
+```
+
+The final summary explains the outcome in plain language:
+
+- **REVIEW NEEDED (exit 1):** warnings need context; this is not an infection count.
+- **SCAN INCOMPLETE (exit 2):** one or more inspections failed. Read the error
+  examples and resolve the affected access/configuration problem.
+- **NO WARNINGS REPORTED (exit 0):** the selected checks reported no warnings or
+  errors. Skipped inspections and unselected checks remain gaps in coverage.
+
+Warnings are grouped by cause, with counts, up to two distinct examples per group,
+explanations and review guidance. Repeated process warnings for the same
+executable are combined in the examples; raw results remain intact. Groups
+distinguish missing baselines, changed files/accounts, writable locations,
+unquoted service paths, missing executables, driver signatures, security settings,
+hosts entries, WMI subscriptions and supplied indicator matches.
+
+The summary also lists observed security settings, groups the reasons for skipped
+inspections, states whether the run was elevated, and shows baseline and Windows
+indicator coverage. Next steps include a command for an elevated rerun when
+needed. A baseline command is suggested only when comparisons lack a baseline,
+with an explicit instruction to verify the computer before trusting its state.
+
+Counts refer to **result entries**, not distinct tests, infected files or malware
+families. `Info` means an observation was recorded; `Allowed` means your own rule
+accepted a warning, not that the scanner verified it safe. No warnings are
+automatically dismissed as false positives. A file's publisher is not verified
+by the summary merely because its path resembles a familiar application.
+
+The detailed summary is saved in the text log even with `--quiet`, `--rwo` or
+`--cronjob`; those switches retain their console suppression behavior. The
+original one-line counts and exit codes remain available for existing workflows.
 
 | Command | Code | Meaning |
 | --- | --- | --- |
@@ -228,7 +326,14 @@ For upgrades, run `setup.cmd` from the newer checkout with the same destination.
 Review changed program/launcher files before refreshing their baseline.
 
 If `rkhunter` is not found after installation, close/reopen your terminal host,
-or run the installed launcher directly from any folder:
+or refresh the current PowerShell session:
+
+```powershell
+$env:Path = "$env:LOCALAPPDATA\Programs\rkhunter;$env:Path"
+rkhunter --admin --check
+```
+
+You can also run the installed launcher directly from any folder:
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\rkhunter\rkhunter.cmd" --admin --check
@@ -239,7 +344,9 @@ from **Edit environment variables for your account → Path**. This does not
 remove the installed files or saved reports. A clone and an installed copy have
 separate state; installing does not migrate a clone's `var` directory.
 
-## Verify
+## Development
+
+Run the automated checks from the repository root:
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -File .\tests\run.ps1
@@ -257,7 +364,27 @@ current permissions; UAC requests and cancellation are mocked, so automated
 tests do not display UAC prompts.
 Keep test artifacts for inspection or remove that directory after testing.
 
-For the upstream-to-Windows mapping, see
-[`docs/compatibility.md`](docs/compatibility.md). Upstream attribution and
-modifications are recorded in [`NOTICE.md`](NOTICE.md); GPL terms are in
-[`LICENSE`](LICENSE).
+The [Windows checks workflow](https://github.com/hussein-chakroun/rkhunter/actions/workflows/windows.yml)
+also runs regression tests on Windows PowerShell 5.1 and PowerShell 7.
+
+### Contributing
+
+Issues and pull requests are welcome. For bug reports, include the Windows and
+PowerShell versions, the output of `rkhunter --version`, the command used, and
+relevant sanitized output. Describe expected and actual behavior. For code
+changes, include tests and explain any changes to detection coverage.
+
+Logs can contain usernames, paths, process details, and persistence commands.
+**Review and redact reports before posting them publicly.**
+
+## License and attribution
+
+Distributed under **GNU GPL version 2 or later**. See [LICENSE](LICENSE) for the
+license text and [NOTICE.md](NOTICE.md) for provenance and modification notices.
+
+The original Rootkit Hunter project is credited to Michael Boelen and its
+contributors. Original source, notices, documentation, translations, and
+signatures are retained under [`upstream/`](upstream/), with source checksums in
+[`upstream/SHA256SUMS.json`](upstream/SHA256SUMS.json). See also the upstream
+[acknowledgments](upstream/files/ACKNOWLEDGMENTS) and the
+[Windows compatibility guide](docs/compatibility.md).

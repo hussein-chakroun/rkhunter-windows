@@ -739,6 +739,173 @@ function Update-RkhIndicators($Context) {
     } finally { if ([IO.File]::Exists($temp)) { [IO.File]::Delete($temp) } }
 }
 
+function Get-RkhFindingCategory($Result) {
+    if ($Result.Test -eq 'known_rkts' -and $Result.Detail -like 'SHA256 indicator match:*') { return 'hash_indicator' }
+    if ($Result.Detail -like '*Missing baseline*') { return 'missing_baseline' }
+    if ($Result.Test -in @('hashes','attributes')) { return 'file_changes' }
+    if ($Result.Test -eq 'known_rkts') { return 'path_indicator' }
+    if ($Result.Detail -like '*outside expected system directories*') { return 'masquerading' }
+    if ($Result.Detail -like '*commonly writable location*') { return 'writable_location' }
+    if ($Result.Detail -like 'Unquoted service executable path*') { return 'unquoted_service' }
+    if ($Result.Detail -like 'Executable not found:*' -or $Result.Test -eq 'deleted_files') { return 'missing_executable' }
+    if ($Result.Test -eq 'group_accounts') { return 'password_policy' }
+    if ($Result.Test -in @('passwd_changes','group_changes')) { return 'account_changes' }
+    if ($Result.Test -eq 'wmi_persistence') { return 'wmi' }
+    if ($Result.Test -eq 'hosts') { return 'hosts' }
+    if ($Result.Test -eq 'loaded_modules') { return 'driver_signature' }
+    if ($Result.Test -eq 'ports') { return 'legacy_port' }
+    if ($Result.Test -eq 'system_configs') { return 'security_settings' }
+    if ($Result.Test -eq 'filesystem') { return 'filesystem' }
+    if ($Result.Test -in @('startup_malware','scheduled_tasks')) { return 'persistence_commands' }
+    if ($Result.Test -eq 'promisc') { return 'network_capture' }
+    return 'other'
+}
+
+function Get-RkhNextCommand($Context, [string]$Command) {
+    $parts = @((Join-Path $Context.Root 'rkhunter.cmd'), '--admin', $Command)
+    if ($Context.Config.ConfigFiles.Count) { $parts += @('--configfile', $Context.Config.ConfigFiles[0]) }
+    if ($Context.Options.DbDir) { $parts += @('--dbdir', $Context.Config.DBDIR) }
+    if ($Command -eq '--check') {
+        foreach ($pair in @(@('Enable','--enable'),@('Disable','--disable'),@('LogFile','--logfile'),@('Json','--json'))) {
+                if ($Context.Options[$pair[0]]) {
+                    $value = [string]$Context.Options[$pair[0]]
+                    if ($pair[0] -eq 'LogFile') { $value = $Context.Config.LOGFILE }
+                    if ($pair[0] -eq 'Json') { $value = Resolve-RkhPath $value (Get-Location).Path }
+                    $parts += @($pair[1], $value)
+                }
+        }
+    }
+    # Printable PowerShell command. Single-quote every value, including apostrophes.
+    '& ' + (($parts | ForEach-Object { "'" + $_.Replace("'","''") + "'" }) -join ' ')
+}
+
+function Get-RkhScanSummary($Context, [string[]]$Tests, $Counts, [int]$ExitCode, [bool]$Elevated) {
+    $findings = [ordered]@{
+        hash_indicator = @('File hashes match supplied threat indicators','A whole-file SHA256 matched your local indicator database. Validate the indicator source and investigate the file promptly; the scanner does not quarantine it.')
+        masquerading = @('Windows process names in unexpected directories','A process uses a Windows system name outside the expected directories. Check its full path, publisher and origin promptly.')
+        file_changes = @('Monitored file properties changed','Compare the changed files with their trusted source or expected updates. Do not refresh the baseline until the changes are explained.')
+        account_changes = @('Local account or administrator membership changed','Review added, removed or changed accounts and group members against authorized changes.')
+        persistence_commands = @('Startup or scheduled commands need review','Inspect the listed command, arguments and owning application. Custom login values, encoded commands, debugger hooks and URLs may be legitimate but require explanation.')
+        security_settings = @('Security settings need review','Review the specific disabled or unexpected setting. Organizational policy or another security product may explain it.')
+        driver_signature = @('Driver signature checks need review','Verify the driver publisher and package. Drivers can be catalog-signed without an embedded signature; this result alone does not establish malware.')
+        unquoted_service = @('Service executable paths are unquoted','Have the owning application installer/vendor or an administrator review and correct quoting, preserving arguments. Exploitability depends on writable path locations; this finding alone does not establish a vulnerability or infection.')
+        missing_executable = @('Executables referenced by processes or tasks are missing','Compare the task/process path with the owning application installation. Updates, uninstall leftovers or process-exit races can explain this; repair the application or review obsolete entries before removal. Review Windows tasks before making changes.')
+        path_indicator = @('Paths match supplied threat indicators','Check the indicator source and inspect the file. An exact filename/path match alone does not identify malware.')
+        wmi = @('Permanent WMI subscriptions need review','Review the consumer and filter. Management tools and Windows use WMI subscriptions too; the SCM Event Log names alone do not establish malicious persistence.')
+        writable_location = @('Executables use commonly writable locations','AppData and Temp are also used by legitimate applications. Verify the publisher, full path and expected installation; location alone does not identify malware.')
+        password_policy = @('Enabled accounts do not require a password','Review account policy. PasswordRequired=False does not mean the password is blank and does not describe Windows Hello/PIN configuration.')
+        hosts = @('Hosts file contains non-default entries','Check whether each redirect is expected. Docker, development tools and blocking lists can add legitimate entries.')
+        legacy_port = @('Listeners match historical port indicators','Identify the owning application. The upstream Unix-era port list is not a current Windows threat feed; matching a port does not identify malware.')
+        network_capture = @('Network adapters report promiscuous mode','Check whether a capture tool or virtualization software enabled this intentionally. Promiscuous mode alone does not identify a malicious sniffer.')
+        filesystem = @('Hidden files or alternate data streams need review','Inspect the listed file/stream and its origin. Hidden attributes and streams can have legitimate application uses.')
+        missing_baseline = @('File/account comparisons have no usable baseline','No usable earlier state is available for comparison. Resolve baseline errors first. After independently verifying the computer, --propupd explicitly trusts the current state; it does not repair findings.')
+        other = @('Other findings need review','Read the affected subjects and details in the log; these findings require context and are not confirmed infections.')
+    }
+    $groups = @{}
+    foreach ($result in @($Context.Results | Where-Object Status -eq Warning)) {
+        $key = Get-RkhFindingCategory $result
+        if (-not $groups.ContainsKey($key)) { $groups[$key] = [Collections.Generic.List[object]]::new() }
+        $groups[$key].Add($result)
+    }
+    $warningGroups = @(
+        foreach ($key in $findings.Keys) {
+            if (-not $groups.ContainsKey($key)) { continue }
+            $seen = @{}; $examples = @()
+            foreach ($result in $groups[$key]) {
+                $subject = $result.Subject -replace ' \(PID \d+\)$',''
+                $identity = $result.Test + '|' + $subject + '|' + $result.Detail
+                if (-not $seen.ContainsKey($identity)) {
+                    $seen[$identity] = $true
+                    $examples += [pscustomobject]@{ Test=$result.Test; Subject=$subject; Detail=$result.Detail }
+                }
+            }
+            [pscustomobject]@{ Category=$key; Title=$findings[$key][0]; Count=$groups[$key].Count; DistinctEntries=$examples.Count; Explanation=$findings[$key][1]; Examples=@($examples | Select-Object -First 2) }
+        }
+    )
+    $errorGroups = @($Context.Results | Where-Object Status -eq Error | Group-Object Test | ForEach-Object {
+        [pscustomobject]@{ Test=$_.Name; Count=$_.Count; Examples=@($_.Group | Select-Object -First 2 Subject,Detail) }
+    })
+    $skippedGroups = @($Context.Results | Where-Object Status -eq Skipped | Group-Object -Property {
+        if ($_.Detail -like 'UNSUPPORTED:*') { 'Platform-specific / unsupported checks' }
+        elseif ($_.Test -eq 'scheduled_tasks' -and $_.Detail -like 'Non-executable action*') { 'Scheduled task actions without an inspected executable (for example COM handlers)' }
+        elseif ($_.Subject -eq 'Protected or exited processes') { 'Protected or exited process executable paths' }
+        elseif ($_.Test -eq 'known_rkts') { 'Windows indicator inspection incomplete or unavailable' }
+        elseif ($_.Subject -eq 'Elevation') { 'Not running as Administrator' }
+        elseif ($_.Subject -eq 'Scan limit') { 'File inspection limit reached' }
+        else { 'Other unavailable inspections: ' + $_.Test }
+    } | ForEach-Object { [pscustomobject]@{ Reason=$_.Name; Count=$_.Count; Example=$_.Group[0].Detail } })
+    $baseline = if (@($Context.Results | Where-Object { $_.Test -eq 'environment' -and $_.Subject -eq 'Baseline database' -and $_.Status -eq 'Error' }).Count) { 'Invalid or unreadable' }
+        elseif ($null -ne $Context.Baseline) { 'Loaded' } else { 'Missing' }
+    $hashCount = @($Context.Indicators.sha256).Count; $pathCount = @($Context.Indicators.paths).Count
+    $indicatorStatus = if ('known_rkts' -notin $Tests) { 'Not selected; Windows threat indicators were not checked.' }
+        elseif ($hashCount + $pathCount -eq 0) { 'Empty; Windows threat indicator inspection was skipped.' }
+        else { "$hashCount SHA256 and $pathCount path indicators supplied; inspection is limited to configured files/directories." }
+    $nextSteps = [Collections.Generic.List[string]]::new()
+    if ($Counts.Error) { $nextSteps.Add('Resolve the inspection errors below before relying on the affected checks.') }
+    if (-not $Elevated) { $nextSteps.Add('For access to protected inventories, rerun with Administrator privileges:'); $nextSteps.Add((Get-RkhNextCommand $Context '--check')) }
+    if ($warningGroups.Count) { $nextSteps.Add('Review the warning groups and their examples; the log contains every affected entry.') }
+    if ($baseline -eq 'Missing' -and 'missing_baseline' -in @($warningGroups.Category)) {
+        $nextSteps.Add('Only after independently verifying the current files and accounts, create the baseline with:')
+        $nextSteps.Add((Get-RkhNextCommand $Context '--propupd'))
+    }
+    if ('known_rkts' -in $Tests -and $hashCount + $pathCount -eq 0) { $nextSteps.Add(('For Windows indicator coverage, supply verified indicators as described in ' + (Join-Path $Context.Root 'docs\indicators.md') + '. This tool has no active vendor threat feed.')) }
+    if ($Counts.Allowed) { $nextSteps.Add('Review Allowed entries too: they are warnings accepted by your configuration, not findings verified safe.') }
+    $outcome = if ($ExitCode -eq 2) { 'SCAN INCOMPLETE - inspection errors occurred' }
+        elseif ($ExitCode -eq 1) { 'REVIEW NEEDED - warnings were reported' }
+        elseif ($Counts.Skipped) { 'NO WARNINGS REPORTED - coverage is limited by skipped inspections' }
+        else { 'NO WARNINGS REPORTED by the selected checks' }
+    [pscustomobject]@{
+        Outcome=$outcome; ExitCode=$ExitCode; Elevated=$Elevated; SelectedChecks=$Tests.Count
+        Baseline=$baseline; BaselineComparisonsSelected=(@($Tests | Where-Object { $_ -in @('hashes','attributes','passwd_changes','group_changes') }).Count -gt 0)
+        IndicatorCoverage=$indicatorStatus; WarningGroups=$warningGroups; ErrorGroups=$errorGroups; SkippedGroups=$skippedGroups
+        SecuritySettings=@($Context.Results | Where-Object Test -eq system_configs | Select-Object Subject,Status,Detail)
+        NextSteps=$nextSteps.ToArray(); LogPath=$Context.Config.LOGFILE
+        JsonPath=if ($Context.Options.Json) { Resolve-RkhPath $Context.Options.Json (Get-Location).Path } else { $null }
+        Limitations='Warnings are findings to review, not a count of infected files. No result establishes that a computer is rootkit-free. The scanner does not remove malware.'
+    }
+}
+
+function Format-RkhScanSummary($Summary, $Counts) {
+    "Summary: $($Counts.OK) OK, $($Counts.Info) informational, $($Counts.Warning) warnings, $($Counts.Error) errors, $($Counts.Skipped) skipped, $($Counts.Allowed) allowed. Exit=$($Summary.ExitCode)"
+    "Result: $($Summary.Outcome)"
+    'Counts are result entries, not infected-file counts or distinct tests. Informational entries are observations, not passed checks.'
+    "Run: $($Summary.SelectedChecks) selected checks; Administrator=$($Summary.Elevated). Baseline: $($Summary.Baseline)."
+    if (-not $Summary.BaselineComparisonsSelected) { 'File/account baseline comparisons were not selected for this scan.' }
+    "Windows threat indicators: $($Summary.IndicatorCoverage)"
+    if ($Summary.SecuritySettings.Count) {
+        ''; 'Security settings observed:'
+        foreach ($item in $Summary.SecuritySettings) { "  $($item.Subject): $($item.Status) - $($item.Detail)" }
+    }
+    if ($Summary.ErrorGroups.Count) {
+        ''; 'Inspection errors (these checks did not complete):'
+        foreach ($group in $Summary.ErrorGroups) {
+            "  $($group.Test): $($group.Count) error(s)"
+            foreach ($item in $group.Examples) { "    $($item.Subject): $($item.Detail)" }
+        }
+    }
+    if ($Summary.WarningGroups.Count) {
+        ''; 'Warnings grouped for review:'
+        foreach ($group in $Summary.WarningGroups) {
+            "  $($group.Title) - results: $($group.Count); distinct entries: $($group.DistinctEntries)"
+            "    $($group.Explanation)"
+            foreach ($item in $group.Examples) { "    Example [$($item.Test)] $($item.Subject): $($item.Detail)" }
+            if ($group.DistinctEntries -gt $group.Examples.Count) { "    See the log for $($group.DistinctEntries - $group.Examples.Count) more distinct entries in this group." }
+        }
+    }
+    if ($Counts.Allowed) { ''; "Allowed: $($Counts.Allowed) warning(s) accepted by your ALLOW rules; original details remain in the report." }
+    if ($Summary.SkippedGroups.Count) {
+        ''; 'Coverage gaps (skipped inspections were not passed):'
+        foreach ($group in $Summary.SkippedGroups) {
+            "  $($group.Reason): $($group.Count) result(s)"
+            "    Example: $($group.Example)"
+        }
+    }
+    if ($Summary.NextSteps.Count) { ''; 'Next steps:'; foreach ($step in $Summary.NextSteps) { "  $step" } }
+    ''; $Summary.Limitations
+    "Log: $($Summary.LogPath)"
+    if ($Summary.JsonPath) { "JSON report: $($Summary.JsonPath)" }
+}
+
 function Invoke-RkhCheck($Context, [string[]]$Tests) {
     $started = [DateTime]::UtcNow
     $logPath = $Context.Config.LOGFILE
@@ -758,14 +925,12 @@ function Invoke-RkhCheck($Context, [string[]]$Tests) {
         $counts = [ordered]@{ OK=0; Info=0; Warning=0; Error=0; Skipped=0; Allowed=0 }
         foreach ($result in $Context.Results) { $counts[$result.Status]++ }
         $exitCode = if ($counts.Error) { 2 } elseif ($counts.Warning) { 1 } else { 0 }
-        $report = [ordered]@{ SchemaVersion=1; Version=$script:RkhVersion; Computer=[Environment]::MachineName; StartedUtc=$started.ToString('o'); FinishedUtc=[DateTime]::UtcNow.ToString('o'); Elevated=$admin; Tests=$Tests; Counts=$counts; ExitCode=$exitCode; Results=$Context.Results.ToArray() }
+        $interpretation = Get-RkhScanSummary $Context $Tests $counts $exitCode $admin
+        $report = [ordered]@{ SchemaVersion=1; Version=$script:RkhVersion; Computer=[Environment]::MachineName; StartedUtc=$started.ToString('o'); FinishedUtc=[DateTime]::UtcNow.ToString('o'); Elevated=$admin; Tests=$Tests; Counts=$counts; ExitCode=$exitCode; Summary=$interpretation; Results=$Context.Results.ToArray() }
         if ($Context.Options.Json) { Write-RkhAtomicJson (Resolve-RkhPath $Context.Options.Json (Get-Location).Path) $report }
-        $summary = "Summary: $($counts.OK) OK, $($counts.Info) informational, $($counts.Warning) warnings, $($counts.Error) errors, $($counts.Skipped) skipped, $($counts.Allowed) allowed. Exit=$exitCode"
-        $Context.Log.WriteLine($summary)
-        if (-not $Context.Options.Quiet -and -not $Context.Options.Cron -and -not $Context.Options.Rwo) {
-            Write-Host $summary
-            Write-Host ("Log: $logPath")
-            Write-Host 'Warnings require investigation. Skipped checks are gaps in coverage; a clean result does not establish absence of a rootkit.'
+        foreach ($line in @(Format-RkhScanSummary $interpretation $counts)) {
+            $Context.Log.WriteLine($line)
+            if (-not $Context.Options.Quiet -and -not $Context.Options.Cron -and -not $Context.Options.Rwo) { Write-Host $line }
         }
         return $exitCode
     } finally { $Context.Log.Dispose(); $Context.Log = $null }

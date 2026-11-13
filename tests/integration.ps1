@@ -38,6 +38,9 @@ try {
     $result = Run-Scanner @('--check','--quiet','--json',$report)
     $json = [IO.File]::ReadAllText($report) | ConvertFrom-Json
     Assert-Result ($result.Code -eq 1 -and $json.Counts.Warning -ge 1 -and -not (Test-Path -LiteralPath (Join-Path $install 'state\rkhunter.dat.json'))) 'first scan warns and does not create trust automatically'
+    Assert-Result ($json.Summary.Baseline -eq 'Missing' -and $json.Summary.Outcome.StartsWith('REVIEW NEEDED')) 'first scan explains the missing baseline in its structured summary'
+    $result = Run-Scanner @('--check','--enable','hidden_procs')
+    Assert-Result ($result.Code -eq 0 -and $result.Output.Contains('NO WARNINGS REPORTED - coverage is limited') -and $result.Output.Contains('Coverage gaps') -and $result.Output.Contains('not infected-file counts')) 'normal CLI explains limited coverage and result counts in its console summary'
 
     $result = Run-Scanner @('--propupd')
     Assert-Result ($result.Code -eq 0) ("explicit baseline creation succeeds: " + $result.Output)

@@ -25,6 +25,12 @@ $null = [IO.Directory]::CreateDirectory($fixture)
         $cfg.ConfigFiles = @(); $cfg.FILE = @(); $cfg.SCAN_DIR = @(); $cfg.ALLOW = @()
         @{ Root=$Root; Config=$cfg; Options=(Get-RkhOptions @('--check','--quiet')); Results=[Collections.Generic.List[object]]::new(); Cache=@{}; Log=$null; Baseline=$null; Indicators=(Read-RkhIndicators (Join-Path $Root 'data\windows-indicators.json')) }
     }
+    function New-TestSummary($Context,[string[]]$Tests,[bool]$Elevated=$true) {
+        $counts = [ordered]@{ OK=0; Info=0; Warning=0; Error=0; Skipped=0; Allowed=0 }
+        foreach ($result in $Context.Results) { $counts[$result.Status]++ }
+        $code = if ($counts.Error) { 2 } elseif ($counts.Warning) { 1 } else { 0 }
+        Get-RkhScanSummary $Context $Tests $counts $code $Elevated
+    }
     Test-Case 'GNU-style aliases preserve -c versus -C' {
         Assert-True ((Get-RkhOptions @('-c')).Command -eq 'check')
         Assert-True ((Get-RkhOptions @('-C')).Command -eq 'config-check')
@@ -246,6 +252,75 @@ $null = [IO.Directory]::CreateDirectory($fixture)
         $ctx = New-TestContext; $code = Invoke-RkhCheck $ctx @('hashes')
         Assert-True ($code -eq 1)
         Assert-True (Test-Path -LiteralPath ($ctx.Config.LOGFILE + '.old'))
+    }
+    Test-Case 'summary explains repeated process warnings without changing raw findings' {
+        $ctx = New-TestContext
+        Add-RkhResult $ctx 'running_procs' 'Example.exe (PID 1)' 'Warning' 'Running from a commonly writable location: C:\Users\example\AppData\Example.exe'
+        Add-RkhResult $ctx 'running_procs' 'Example.exe (PID 2)' 'Warning' 'Running from a commonly writable location: C:\Users\example\AppData\Example.exe'
+        Add-RkhResult $ctx 'services' 'Example service' 'Warning' 'Unquoted service executable path contains spaces: C:\Program Files\Example.exe'
+        $summary = New-TestSummary $ctx @('running_procs','services')
+        $group = $summary.WarningGroups | Where-Object Category -eq writable_location
+        Assert-True ($group.Count -eq 2 -and $group.DistinctEntries -eq 1 -and $group.Examples.Count -eq 1)
+        Assert-True ($group.Explanation.Contains('location alone does not identify malware'))
+        Assert-True ($ctx.Results.Count -eq 3 -and $summary.ExitCode -eq 1 -and $summary.WarningGroups.Count -eq 2)
+    }
+    Test-Case 'summary separates hash indicator evidence from path-only findings' {
+        $ctx = New-TestContext
+        Add-RkhResult $ctx 'known_rkts' 'fixture-hash' 'Warning' 'SHA256 indicator match: fixture'
+        Add-RkhResult $ctx 'known_rkts' 'fixture-path' 'Warning' 'Path indicator: fixture. Filename alone is not proof of infection.'
+        $summary = New-TestSummary $ctx @('known_rkts')
+        Assert-True ($summary.WarningGroups[0].Category -eq 'hash_indicator' -and $summary.WarningGroups[1].Category -eq 'path_indicator')
+        Assert-True ($summary.WarningGroups[1].Explanation.Contains('path match alone'))
+    }
+    Test-Case 'summary identifies incomplete scans and preserves custom rerun paths' {
+        $ctx = New-TestContext; $ctx.Root = Join-Path $Fixture "path with ' apostrophe"
+        $ctx.Options.Enable = 'hashes'; $ctx.Options.DbDir = $ctx.Config.DBDIR; $ctx.Options.Json = 'relative report.json'
+        Add-RkhResult $ctx 'hashes' 'example' 'Warning' 'Changed: Sha256.'
+        Add-RkhResult $ctx 'filesystem' 'protected folder' 'Error' 'Access is denied.'
+        $summary = New-TestSummary $ctx @('hashes','filesystem') $false
+        Assert-True ($summary.ExitCode -eq 2 -and $summary.Outcome.StartsWith('SCAN INCOMPLETE') -and $summary.ErrorGroups.Count -eq 1)
+        $next = $summary.NextSteps -join "`n"
+        Assert-True ($next.Contains("path with '' apostrophe") -and $next.Contains('--dbdir') -and $next.Contains((Resolve-RkhPath $ctx.Options.Json (Get-Location).Path)))
+        Assert-True (-not $next.Contains('--propupd'))
+    }
+    Test-Case 'summary groups skipped reasons without claiming a clean computer' {
+        $ctx = New-TestContext
+        Add-RkhResult $ctx 'hidden_procs' 'Kernel view' 'Skipped' 'UNSUPPORTED: independent kernel view required'
+        1..3 | ForEach-Object { Add-RkhResult $ctx 'scheduled_tasks' "Task $_" 'Skipped' 'Non-executable action (for example a COM handler); manual review required.' }
+        $summary = New-TestSummary $ctx @('hidden_procs','scheduled_tasks')
+        Assert-True ($summary.ExitCode -eq 0 -and $summary.Outcome.Contains('coverage is limited'))
+        Assert-True (@($summary.SkippedGroups | Where-Object Count -eq 3).Count -eq 1 -and $summary.SkippedGroups.Count -eq 2)
+        Assert-True ($summary.IndicatorCoverage.StartsWith('Not selected'))
+    }
+    Test-Case 'summary advises explicit trust only for a missing baseline' {
+        $ctx = New-TestContext
+        Add-RkhResult $ctx 'hashes' 'Property database' 'Warning' 'Missing baseline; verify this computer, then run --propupd.'
+        $summary = New-TestSummary $ctx @('hashes','known_rkts')
+        Assert-True ($summary.Baseline -eq 'Missing' -and ($summary.NextSteps -join ' ').Contains('Only after independently verifying'))
+        Assert-True (($summary.NextSteps -join ' ').Contains("'--propupd'") -and $summary.IndicatorCoverage.StartsWith('Empty'))
+        Add-RkhResult $ctx 'environment' 'Baseline database' 'Error' 'Corrupt database'
+        $summary = New-TestSummary $ctx @('hashes')
+        Assert-True ($summary.Baseline -eq 'Invalid or unreadable' -and -not ($summary.NextSteps -join ' ').Contains("'--propupd'"))
+    }
+    Test-Case 'summary retains accepted warning context and healthy settings' {
+        $ctx = New-TestContext; $ctx.Config.ALLOW = @('services|Reviewed')
+        Add-RkhResult $ctx 'services' 'Reviewed' 'Warning' 'Reviewed warning'
+        Add-RkhResult $ctx 'system_configs' 'Secure Boot' 'OK' 'Enabled=True'
+        $summary = New-TestSummary $ctx @('services','system_configs')
+        Assert-True ($summary.WarningGroups.Count -eq 0 -and $summary.SecuritySettings[0].Detail -eq 'Enabled=True')
+        Assert-True (($summary.NextSteps -join ' ').Contains('not findings verified safe') -and $ctx.Results[0].OriginalStatus -eq 'Warning')
+    }
+    Test-Case 'quiet, warning-only and cron scans save explanatory log and JSON summaries' {
+        foreach ($options in @(@('--check','--quiet'),@('--check','--rwo'),@('--cronjob'))) {
+            $ctx = New-TestContext; $ctx.Options = Get-RkhOptions $options
+            $ctx.Options.Json = Join-Path $Fixture 'quiet-summary.json'
+            $output = @(& { Invoke-RkhCheck $ctx @('hidden_procs') } 6>&1)
+            Assert-True ($output.Count -eq 1 -and $output[0] -eq 0) 'Console suppression must preserve the numeric exit code.'
+            $json = [IO.File]::ReadAllText($ctx.Options.Json) | ConvertFrom-Json
+            $log = [IO.File]::ReadAllText($ctx.Config.LOGFILE)
+            Assert-True ($json.Summary.Outcome.Contains('coverage is limited') -and $json.Summary.WarningGroups.Count -eq 0)
+            Assert-True ($log.Contains('Coverage gaps') -and $log.Contains('not infected-file counts') -and $log.Contains('JSON report:'))
+        }
     }
     Write-Host ("Tests: $script:TestPassed passed, $script:TestFailed failed. Artifacts: $Fixture")
     if ($script:TestFailed) { exit 1 }
